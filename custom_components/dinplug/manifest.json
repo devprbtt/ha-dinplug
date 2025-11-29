@@ -1,0 +1,11 @@
+{
+  "domain": "m4_dinplug",
+  "name": "M4 DINPLUG Lighting",
+  "version": "0.1.0",
+  "documentation": "https://example.com/m4_dinplug",
+  "requirements": [],
+  "codeowners": ["@devprbtt"],
+  "integration_type": "hub",
+  "iot_class": "local_push",
+  "loggers": ["custom_components.m4_dinplug"]
+}
