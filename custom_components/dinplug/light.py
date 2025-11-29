@@ -1,6 +1,5 @@
-import asyncio
 import logging
-from typing import Callable, Dict, Tuple, List, Optional
+from typing import Optional
 
 import voluptuous as vol
 
@@ -11,6 +10,7 @@ from homeassistant.components.light import (
 )
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_NAME
 import homeassistant.helpers.config_validation as cv
+from homeassistant.core import callback
 
 from .const import (
     DOMAIN,
@@ -19,12 +19,11 @@ from .const import (
     CONF_CHANNEL,
     CONF_DIMMER,
 )
+from .hub import M4Hub, get_hub
 
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_PORT = 23
-KEEPALIVE_INTERVAL = 10  # seconds
-RECONNECT_DELAY = 5      # seconds
 
 # ---------- YAML schema ----------
 
@@ -45,137 +44,8 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     }
 )
 
-# ---------- Connection manager ----------
-
-
-class M4Connection:
-    """Single TCP/Telnet connection to the M4/DINPLUG controller."""
-
-    def __init__(self, hass, host: str, port: int):
-        self._hass = hass
-        self._host = host
-        self._port = port
-        self._writer: Optional[asyncio.StreamWriter] = None
-        self._reader: Optional[asyncio.StreamReader] = None
-        self._task: Optional[asyncio.Task] = None
-        self._listeners: Dict[Tuple[int, int], List[Callable[[int], None]]] = {}
-        self._connected = False
-
-    def start(self):
-        """Start background connection loop."""
-        if self._task is None:
-            self._task = self._hass.loop.create_task(self._run_loop())
-
-    async def _run_loop(self):
-        """Connect, read lines, reconnect if needed."""
-        while True:
-            try:
-                _LOGGER.info("Connecting to M4 DINPLUG at %s:%s", self._host, self._port)
-                self._reader, self._writer = await asyncio.open_connection(
-                    self._host, self._port
-                )
-                self._connected = True
-                _LOGGER.info("M4 DINPLUG connected")
-
-                # Kick off keepalive
-                self._hass.loop.create_task(self._keepalive_loop())
-
-                # Read loop
-                while True:
-                    line = await self._reader.readline()
-                    if not line:
-                        raise ConnectionError("EOF from controller")
-                    text = line.decode(errors="ignore").strip()
-                    if not text:
-                        continue
-                    self._handle_line(text)
-
-            except Exception as e:
-                _LOGGER.warning("M4 DINPLUG connection error: %s", e)
-            finally:
-                self._connected = False
-                if self._writer:
-                    try:
-                        self._writer.close()
-                        await self._writer.wait_closed()
-                    except Exception:
-                        pass
-                self._writer = None
-                self._reader = None
-
-            _LOGGER.info("Reconnecting to M4 DINPLUG in %s seconds", RECONNECT_DELAY)
-            await asyncio.sleep(RECONNECT_DELAY)
-
-    async def _keepalive_loop(self):
-        """Send STA keepalive while connected."""
-        while self._connected and self._writer is not None:
-            try:
-                self.send_raw("STA")
-            except Exception as e:
-                _LOGGER.debug("Failed to send STA: %s", e)
-            await asyncio.sleep(KEEPALIVE_INTERVAL)
-
-    def send_raw(self, cmd: str):
-        """Send a raw command with CRLF."""
-        if not self._writer:
-            raise ConnectionError("Not connected to controller")
-        msg = (cmd + "\r\n").encode()
-        self._writer.write(msg)
-
-    # ---- Protocol-specific helpers ----
-
-    def send_load(self, device: int, channel: int, level: int, fade: Optional[int] = None):
-        """Send LOAD command.
-
-        If fade is None -> LOAD dev ch level
-        Else -> LOAD dev ch level fade
-        """
-        level = max(0, min(100, int(level)))
-        if fade is None:
-            cmd = f"LOAD {device} {channel} {level}"
-        else:
-            cmd = f"LOAD {device} {channel} {level:03d} {fade:04d}"
-        _LOGGER.debug("SEND: %s", cmd)
-        self.send_raw(cmd)
-
-    def send_switch(self, device: int, channel: int, on: bool):
-        """Switch-style LOAD."""
-        level = 100 if on else 0
-        cmd = f"LOAD {device} {channel} {level}"
-        _LOGGER.debug("SEND: %s", cmd)
-        self.send_raw(cmd)
-
-    def register_load_listener(
-        self, device: int, channel: int, callback: Callable[[int], None]
-    ):
-        key = (device, channel)
-        self._listeners.setdefault(key, []).append(callback)
-
-    def _handle_line(self, text: str):
-        """Parse incoming lines and dispatch R:LOAD."""
-        _LOGGER.debug("RX: %s", text)
-
-        # Example: R:LOAD 104 3 50
-        if text.startswith("R:LOAD "):
-            parts = text.split()
-            if len(parts) >= 4:
-                try:
-                    dev = int(parts[1])
-                    ch = int(parts[2])
-                    level = int(parts[3])
-                except ValueError:
-                    return
-
-                key = (dev, ch)
-                if key in self._listeners:
-                    for cb in self._listeners[key]:
-                        # Run callbacks in HA loop safely
-                        self._hass.add_job(cb, level)
-
-        # You can extend later: R:SCN, R:HVAC, etc.
-
-
 # ---------- Platform setup ----------
+
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
     """Set up dinplug lights from YAML."""
@@ -183,15 +53,8 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     port = config[CONF_PORT]
     lights_conf = config[CONF_LIGHTS]
 
-    hass.data.setdefault(DOMAIN, {})
-    conn_key = (host, port)
-
-    if conn_key not in hass.data[DOMAIN]:
-        conn = M4Connection(hass, host, port)
-        hass.data[DOMAIN][conn_key] = conn
-        conn.start()
-    else:
-        conn = hass.data[DOMAIN][conn_key]
+    # Get a shared hub instance
+    hub = await get_hub(hass, host, port)
 
     entities = []
     for cfg in lights_conf:
@@ -199,7 +62,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         dev = cfg[CONF_DEVICE]
         ch = cfg[CONF_CHANNEL]
         dimmer = cfg[CONF_DIMMER]
-        entities.append(M4Light(conn, host, port, name, dev, ch, dimmer))
+        entities.append(M4Light(hub, name, dev, ch, dimmer))
 
     async_add_entities(entities, update_before_add=True)
 
@@ -212,17 +75,13 @@ class M4Light(LightEntity):
 
     def __init__(
         self,
-        conn: M4Connection,
-        host: str,
-        port: int,
+        hub: M4Hub,
         name: str,
         device: int,
         channel: int,
         dimmer: bool,
     ):
-        self._conn = conn
-        self._host = host
-        self._port = port
+        self._hub = hub
         self._attr_name = name
         self._device = device
         self._channel = channel
@@ -238,10 +97,23 @@ class M4Light(LightEntity):
             self._attr_supported_color_modes = {ColorMode.ONOFF}
             self._attr_color_mode = ColorMode.ONOFF
 
-        self._attr_unique_id = f"{self._host}-{self._port}-{self._device}-{self._channel}"
+        self._attr_unique_id = (
+            f"{self._hub.host}-{self._hub.port}-{self._device}-{self._channel}"
+        )
 
-        # Register for R:LOAD updates for this device/channel
-        self._conn.register_load_listener(self._device, self._channel, self._handle_level_update)
+    # ---- HA lifecycle hooks ----
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity which will be added."""
+        # Register for R:LOAD updates
+        self._hub.register_load_listener(
+            self._device, self._channel, self._handle_level_update
+        )
+
+        # Restore initial state from hub's cache
+        last_level = self._hub.get_last_load(self._device, self._channel)
+        if last_level is not None:
+            self._handle_level_update(last_level)
 
     # ---- HA required properties ----
 
@@ -258,8 +130,9 @@ class M4Light(LightEntity):
 
     # ---- Callbacks from connection ----
 
+    @callback
     def _handle_level_update(self, level: int):
-        """Callback from M4Connection when R:LOAD is received."""
+        """Callback from M4Hub when R:LOAD is received."""
         # Ignore weird levels like 65535 from REFRESH
         if level < 0 or level > 100:
             return
@@ -274,7 +147,7 @@ class M4Light(LightEntity):
             self._channel,
             level,
         )
-        self.schedule_update_ha_state()
+        self.async_write_ha_state()
 
     # ---- Commands from HA ----
 
@@ -286,12 +159,12 @@ class M4Light(LightEntity):
                 level = max(1, min(100, int(b * 100 / 255)))
             else:
                 level = 100
-            self._conn.send_load(self._device, self._channel, level)
+            self._hub.send_load(self._device, self._channel, level)
         else:
-            self._conn.send_switch(self._device, self._channel, True)
+            self._hub.send_switch(self._device, self._channel, True)
 
     async def async_turn_off(self, **kwargs):
         if self._dimmer:
-            self._conn.send_load(self._device, self._channel, 0)
+            self._hub.send_load(self._device, self._channel, 0)
         else:
-            self._conn.send_switch(self._device, self._channel, False)
+            self._hub.send_switch(self._device, self._channel, False)
