@@ -3,13 +3,13 @@
 Integração customizada do Home Assistant para controlar módulos de iluminação **M4 / DINPLUG** via Telnet (porta 23).
 
 Esta integração permite controlar cargas individuais dos módulos M4 como entidades `light`, incluindo:
-- Luzes On/Off
-- Dimmers (0–100%)
-- Múltiplos módulos e múltiplos canais
+- Luzes On/Off  
+- Dimmers (0–100%)  
+- Múltiplos módulos e múltiplos canais  
 - Atualizações em tempo real por telemetria `R:LOAD`
 
 > 📌 Esta é a versão baseada em **YAML** (sem Config Flow).
->
+>  
 > Ideal para instalações profissionais, simples e diretas.
 
 ---
