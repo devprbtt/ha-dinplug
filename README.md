@@ -1,8 +1,8 @@
-# M4 DINPLUG – Home Assistant Integration (YAML)
+# DINPLUG – Home Assistant Integration (YAML)
 
-Integração customizada do Home Assistant para controlar módulos de iluminação **M4 / DINPLUG** via Telnet (porta 23).
+Integração customizada do Home Assistant para controlar módulos de iluminação **DINPLUG** via Telnet (porta 23).
 
-Esta integração permite controlar cargas individuais dos módulos M4 como entidades `light`, incluindo:
+Esta integração permite controlar cargas individuais dos módulos DINPLUG como entidades `light`, incluindo:
 - Luzes On/Off  
 - Dimmers (0–100%)  
 - Múltiplos módulos e múltiplos canais  
@@ -19,30 +19,23 @@ Esta integração permite controlar cargas individuais dos módulos M4 como enti
 1. Baixe este repositório.
 2. Copie a pasta:
 
-
-
-custom_components/dinplug
-
+`custom_components/dinplug`
 
 para dentro do diretório de configuração do Home Assistant:
 
-
-
-/config/custom_components/dinplug
-
+`/config/custom_components/dinplug`
 
 A estrutura final deve ficar assim:
 
-
-
+```
 /config
 └── custom_components
-└── dinplug
-├── init.py
-├── const.py
-├── light.py
-└── manifest.json
-
+    └── dinplug
+        ├── __init__.py
+        ├── const.py
+        ├── light.py
+        └── manifest.json
+```
 
 3. Reinicie o Home Assistant.
 
@@ -81,7 +74,7 @@ light:
 
 ### 💡 Como funciona
 
-O Home Assistant abre uma conexão TCP com o controlador M4 e:
+O Home Assistant abre uma conexão TCP com o controlador DINPLUG e:
 
 **Envia comandos:**
 
