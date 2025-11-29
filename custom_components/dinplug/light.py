@@ -61,6 +61,9 @@ class M4Connection:
         self._listeners: Dict[Tuple[int, int], List[Callable[[int], None]]] = {}
         self._connected = False
 
+        # Cache de último nível conhecido por (device, channel)
+        self._last_levels: Dict[Tuple[int, int], int] = {}
+
     def start(self):
         """Start background connection loop."""
         if self._task is None:
@@ -76,6 +79,12 @@ class M4Connection:
                 )
                 self._connected = True
                 _LOGGER.info("M4 DINPLUG connected")
+
+                # Ao conectar, pede um REFRESH para o controlador mandar o estado de tudo
+                try:
+                    self.send_raw("REFRESH")
+                except Exception as e:
+                    _LOGGER.debug("Failed to send REFRESH: %s", e)
 
                 # Kick off keepalive
                 self._hass.loop.create_task(self._keepalive_loop())
@@ -120,6 +129,7 @@ class M4Connection:
         if not self._writer:
             raise ConnectionError("Not connected to controller")
         msg = (cmd + "\r\n").encode()
+        _LOGGER.debug("TX: %s", cmd)
         self._writer.write(msg)
 
     # ---- Protocol-specific helpers ----
@@ -151,6 +161,10 @@ class M4Connection:
         key = (device, channel)
         self._listeners.setdefault(key, []).append(callback)
 
+    def get_last_level(self, device: int, channel: int) -> Optional[int]:
+        """Return last known level for a given device/channel (from R:LOAD)."""
+        return self._last_levels.get((device, channel))
+
     def _handle_line(self, text: str):
         """Parse incoming lines and dispatch R:LOAD."""
         _LOGGER.debug("RX: %s", text)
@@ -167,12 +181,16 @@ class M4Connection:
                     return
 
                 key = (dev, ch)
+
+                # Guarda último nível conhecido
+                self._last_levels[key] = level
+
                 if key in self._listeners:
                     for cb in self._listeners[key]:
                         # Run callbacks in HA loop safely
                         self._hass.add_job(cb, level)
 
-        # You can extend later: R:SCN, R:HVAC, etc.
+        # Aqui no futuro dá pra extender: R:SCN, R:HVAC, MODULE STATUS etc.
 
 
 # ---------- Platform setup ----------
@@ -241,7 +259,16 @@ class M4Light(LightEntity):
         self._attr_unique_id = f"{self._host}-{self._port}-{self._device}-{self._channel}"
 
         # Register for R:LOAD updates for this device/channel
-        self._conn.register_load_listener(self._device, self._channel, self._handle_level_update)
+        self._conn.register_load_listener(
+            self._device,
+            self._channel,
+            self._handle_level_update,
+        )
+
+        # Se já tivemos um R:LOAD antes da entidade subir (por REFRESH), usa esse estado
+        last = self._conn.get_last_level(self._device, self._channel)
+        if last is not None:
+            self._handle_level_update(last)
 
     # ---- HA required properties ----
 
@@ -260,8 +287,14 @@ class M4Light(LightEntity):
 
     def _handle_level_update(self, level: int):
         """Callback from M4Connection when R:LOAD is received."""
-        # Ignore weird levels like 65535 from REFRESH
+        # Ignora níveis malucos tipo 65535 do REFRESH
         if level < 0 or level > 100:
+            _LOGGER.debug(
+                "Ignoring out-of-range level for dev=%s ch=%s: %s",
+                self._device,
+                self._channel,
+                level,
+            )
             return
 
         self._level = level
