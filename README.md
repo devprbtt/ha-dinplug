@@ -1,16 +1,14 @@
-# M4 DINPLUG – Home Assistant Integration (YAML)
+# DINPLUG – Home Assistant Integration
 
-Integração customizada do Home Assistant para controlar módulos de iluminação **M4 / DINPLUG** via Telnet (porta 23).
+Integração customizada do Home Assistant para controlar módulos de iluminação **DINPLUG** via Telnet (porta 23).
 
-Esta integração permite controlar cargas individuais dos módulos M4 como entidades `light`, incluindo:
-- Luzes On/Off  
-- Dimmers (0–100%)  
-- Múltiplos módulos e múltiplos canais  
+Esta integração permite controlar cargas individuais dos módulos DINPLUG como entidades `light`, incluindo:
+- Luzes On/Off
+- Dimmers (0–100%)
+- Múltiplos módulos e múltiplos canais
 - Atualizações em tempo real por telemetria `R:LOAD`
 
-> 📌 Esta é a versão baseada em **YAML** (sem Config Flow).
->  
-> Ideal para instalações profissionais, simples e diretas.
+> 📌 Esta versão utiliza **Config Flow** para configuração da conexão e **YAML** para a configuração das luzes.
 
 ---
 
@@ -19,44 +17,49 @@ Esta integração permite controlar cargas individuais dos módulos M4 como enti
 1. Baixe este repositório.
 2. Copie a pasta:
 
-
-
-custom_components/dinplug
-
+`custom_components/dinplug`
 
 para dentro do diretório de configuração do Home Assistant:
 
-
-
-/config/custom_components/dinplug
-
+`/config/custom_components/dinplug`
 
 A estrutura final deve ficar assim:
 
-
-
+```
 /config
 └── custom_components
-└── dinplug
-├── init.py
-├── const.py
-├── light.py
-└── manifest.json
-
+    └── dinplug
+        ├── __init__.py
+        ├── const.py
+        ├── light.py
+        ├── hub.py
+        ├── config_flow.py
+        └── manifest.json
+```
 
 3. Reinicie o Home Assistant.
 
 ---
 
-## ⚙️ Configuração via YAML
+## ⚙️ Configuração
 
-Adicione ao `configuration.yaml`:
+### 1. Adicionar a Integração (via UI)
+
+A conexão com o controlador DINPLUG é configurada pela interface do Home Assistant:
+
+1. Vá para **Configurações > Dispositivos e Serviços**.
+2. Clique em **Adicionar Integração** e procure por **"DINPLUG"**.
+3. Insira o **endereço IP** e a **porta** do seu controlador.
+
+O Home Assistant estabelecerá uma conexão única e centralizada que será usada para todas as luzes.
+
+### 2. Configurar as Luzes (via YAML)
+
+As luzes ainda são definidas no seu arquivo `configuration.yaml`:
 
 ```yaml
 light:
   - platform: dinplug
-    host: 192.168.51.30
-    port: 23
     lights:
       - name: "Sala Teto"
         device: 104
@@ -68,72 +71,67 @@ light:
         channel: 4
         dimmer: false
 ```
+
 ### Campos disponíveis
 | Campo | Tipo | Obrigatório | Descrição |
 | --- | --- | --- | --- |
-| `host` | string | ✔ Sim | IP do controlador DINPLUG |
-| `port` | número | ✖ Não (23) | Porta Telnet |
 | `lights` | lista | ✔ Sim | Lista de cargas |
 | `device` | número | ✔ Sim | Endereço do módulo (ex: 104) |
 | `channel` | número | ✔ Sim | Canal do módulo (1–n) |
 | `name` | string | ✔ Sim | Nome da entidade no HA |
-| `dimmer` | booleano | ✖ Não (true) | `TRUE` = dimmer, `FALSE` = on/off |
+| `dimmer` | booleano | ✖ Não (true) | `true` = dimmer, `false` = on/off |
+
+---
 
 ### 💡 Como funciona
 
-O Home Assistant abre uma conexão TCP com o controlador M4 e:
+A integração usa uma arquitetura de "hub":
 
-**Envia comandos:**
+1.  **Conexão Central (Hub):** O Home Assistant (via Config Flow) estabelece uma única conexão TCP com o controlador DINPLUG, gerenciada pela classe `M4Hub`.
+2.  **Comandos e Telemetria:**
+    *   **Envio:** As entidades `light` enviam comandos para o hub, que os encaminha para o controlador no formato `LOAD <device> <channel> <level>`.
+    *   **Recebimento:** O hub escuta a telemetria `R:LOAD <device> <channel> <level>` e atualiza o estado da entidade correspondente em tempo real.
+3.  **Disponibilidade:** O hub monitora a conexão e o status dos módulos com o comando `STA`, marcando as entidades como disponíveis ou indisponíveis.
 
-`LOAD <device> <channel> <level>`
-
-- `level = 0` → OFF
-- `level = 1–100` → dimmer
-- `level = 100` → ON
-
-**Recebe telemetria:**
-
-`R:LOAD <device> <channel> <level>`
-Atualiza o estado instantaneamente no HA.
-
-**Mantém conexão viva:**
-
-- Envia `STA` periodicamente
-- Monitora `R:MODULE STATUS` para disponibilidade
-
-Tudo é push-based — sem polling.
+Este modelo garante que apenas uma conexão seja usada, evitando conflitos e sobrecarga no controlador.
 
 ### 🔌 Exemplo completo
-```yaml
-light:
-  - platform: dinplug
-    host: 192.168.51.30
-    port: 23
-    lights:
-      - name: "Sala Teto"
-        device: 104
-        channel: 1
-        dimmer: true
 
-      - name: "Sala Arandela"
-        device: 104
-        channel: 2
-        dimmer: false
+1.  **Configuração da Conexão (UI):**
+    *   IP: `192.168.51.30`
+    *   Porta: `23`
 
-      - name: "Spots Cozinha"
-        device: 107
-        channel: 4
-        dimmer: true
+2.  **Configuração das Luzes (`configuration.yaml`):**
+    ```yaml
+    light:
+      - platform: dinplug
+        lights:
+          - name: "Sala Teto"
+            device: 104
+            channel: 1
+            dimmer: true
 
-      - name: "Corredor"
-        device: 105
-        channel: 3
-        dimmer: false
-```
+          - name: "Sala Arandela"
+            device: 104
+            channel: 2
+            dimmer: false
+
+          - name: "Spots Cozinha"
+            device: 107
+            channel: 4
+            dimmer: true
+
+          - name: "Corredor"
+            device: 105
+            channel: 3
+            dimmer: false
+    ```
+
 ---
 
 ### ✔️ Recursos suportados
 
+- [x] Configuração da conexão via UI (Config Flow)
 - [x] Controle ON/OFF
 - [x] Controle de dimmer (brightness)
 - [x] Atualização instantânea por telemetria
@@ -144,7 +142,6 @@ light:
 ### 🚧 Roadmap (próximas versões)
 
 - [ ] Auto-descoberta de loads via `REFRESH`
-- [ ] Configuração via UI (Config Flow)
 - [ ] Suporte a Scenes (`SCN`)
 - [ ] Suporte a Cortinas (`SHADE`)
 - [ ] Suporte a HVAC
