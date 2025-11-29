@@ -213,7 +213,7 @@ class M4Hub:
         if text.startswith("R:MODULES OFFLINE:"):
             payload = text.split("R:MODULES OFFLINE:")[1].strip()
             self._hass.bus.async_fire(
-                "m4_dinplug_offline_count",
+                "dinplug_offline_count",
                 {"raw": text, "payload": payload},
             )
             return
@@ -229,7 +229,7 @@ class M4Hub:
                 except ValueError:
                     return
                 self._hass.bus.async_fire(
-                    "m4_dinplug_keypad",
+                    "dinplug_keypad",
                     {
                         "action": action,
                         "device": device,
@@ -241,7 +241,7 @@ class M4Hub:
 
         # REFRESH mensagens
         if text.startswith("R:REFRESH"):
-            self._hass.bus.async_fire("m4_dinplug_refresh", {"raw": text})
+            self._hass.bus.async_fire("dinplug_refresh", {"raw": text})
 
 
 async def get_hub(hass: HomeAssistant, host: str, port: int) -> M4Hub:
