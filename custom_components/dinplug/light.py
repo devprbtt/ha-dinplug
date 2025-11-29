@@ -178,7 +178,7 @@ class M4Connection:
 # ---------- Platform setup ----------
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """Set up m4_dinplug lights from YAML."""
+    """Set up dinplug lights from YAML."""
     host = config[CONF_HOST]
     port = config[CONF_PORT]
     lights_conf = config[CONF_LIGHTS]

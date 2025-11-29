@@ -1,4 +1,4 @@
-DOMAIN = "m4_dinplug"
+DOMAIN = "dinplug"
 
 CONF_LIGHTS = "lights"
 CONF_DEVICE = "device"
