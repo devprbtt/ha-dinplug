@@ -1,6 +1,12 @@
 DOMAIN = "dinplug"
 
 CONF_LIGHTS = "lights"
+CONF_COVERS = "covers"
+CONF_HVACS = "hvac"
+CONF_BUTTONS = "buttons"
 CONF_DEVICE = "device"
 CONF_CHANNEL = "channel"
 CONF_DIMMER = "dimmer"
+CONF_BUTTON_ID = "button"
+CONF_MIN_TEMP = "min_temp"
+CONF_MAX_TEMP = "max_temp"

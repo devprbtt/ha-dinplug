@@ -162,3 +162,40 @@ logger:
   logs:
     custom_components.dinplug: debug
 ```
+
+---
+
+## Covers, HVAC and Button Sensors (YAML)
+
+Shades, thermostats and keypad/button states now share the same Telnet session as lights. Add new platform blocks to `configuration.yaml` pointing to the same host/port:
+
+```yaml
+cover:
+  - platform: dinplug
+    host: 192.168.51.30
+    covers:
+      - name: "Sala Persiana"
+        device: 101
+        channel: 1
+
+climate:
+  - platform: dinplug
+    host: 192.168.51.30
+    hvac:
+      - name: "Sala HVAC"
+        device: 120
+        min_temp: 16
+        max_temp: 30
+
+sensor:
+  - platform: dinplug
+    host: 192.168.51.30
+    buttons:
+      - name: "Keypad 111 BTN1"
+        device: 111
+        button: 1
+```
+
+- Covers support open/close/stop/set_position and update from `R:SHADE` telemetry.
+- HVAC exposes a single set-point thermostat with `heat`, `cool`, `fan_only`, `off` plus fan speeds (`high`, `medium`, `low`, `auto`).
+- Button sensors track the last keypad/button state (`PRESSED`, `RELEASED`, `HELD`, `DOUBLE`). Each `R:BTN` also fires an event named `dinplug_button_event` with `device`, `button`, and `state`.

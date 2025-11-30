@@ -1,7 +1,7 @@
 {
   "domain": "dinplug",
-  "name": "DINPLUG Lighting",
-  "version": "0.1.0",
+  "name": "DINPLUG Controller",
+  "version": "0.2.0",
   "documentation": "https://example.com/dinplug",
   "requirements": [],
   "codeowners": ["@devprbtt"],
