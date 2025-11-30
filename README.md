@@ -1,66 +1,90 @@
 # DINPLUG - Home Assistant Integration (YAML)
 
-This custom integration for Home Assistant allows you to control **DINPLUG** lighting modules via Telnet (port 23).
+This custom integration for Home Assistant allows you to control **DINPLUG** modules via Telnet (port 23).
 
-It enables the control of individual loads from DINPLUG modules as `light` entities, including:
-- On/Off lights
-- Dimmers (0–100%)
-- Multiple modules and channels
-- Real-time status updates via `R:LOAD` telemetry
+It supports the following platforms:
+- `light`: For On/Off lights and dimmers.
+- `cover`: For shades and blinds.
+- `climate`: For HVAC systems.
+- `sensor`: To monitor keypad button presses.
 
 > 📌 This is the **YAML-based** version (no Config Flow). Ideal for simple, direct, and professional installations.
 
 ---
 
+## ⚠️ Breaking Change (Version 0.2.0)
+
+The YAML configuration format has been updated to support multiple platforms under a single host. If you are upgrading from a previous version, you **must** update your `configuration.yaml` file.
+
+**Old format:**
+```yaml
+light:
+  - platform: dinplug
+    host: 192.168.51.30
+    # ...
+```
+
+**New format:**
+```yaml
+dinplug:
+  - host: 192.168.51.30
+    lights:
+      # ...
+    shades:
+      # ...
+```
+
+---
+
 ## 📦 Installation
 
-1. Download this repository.
-2. Copy the folder:
-
-`custom_components/dinplug`
-
-into your Home Assistant configuration directory:
-
-`/config/custom_components/dinplug`
+1.  Download this repository.
+2.  Copy the folder `custom_components/dinplug` into your Home Assistant configuration directory (`/config`).
+3.  Restart Home Assistant.
 
 The final structure should look like this:
-
 ```
 /config
 └── custom_components
     └── dinplug
         ├── __init__.py
-        ├── const.py
+        ├── hub.py
         ├── light.py
+        ├── cover.py
+        ├── climate.py
+        ├── sensor.py
         └── manifest.json
 ```
-
-3. Restart Home Assistant.
 
 ---
 
 ## ⚙️ Configuration (YAML)
 
-Add the following to your `configuration.yaml` file:
+Add the `dinplug` integration to your `configuration.yaml` file. All platforms (light, cover, climate, sensor) are configured under the same host.
 
 ```yaml
-light:
-  - platform: dinplug
-    host: 192.168.51.30
+dinplug:
+  - host: 192.168.51.30
     port: 23
     lights:
       - name: "Living Room Ceiling"
         device: 104
         channel: 1
         dimmer: true
-
-      - name: "Kitchen Spots"
-        device: 107
-        channel: 4
-        dimmer: false
+    shades:
+      - name: "Living Room Shade"
+        device: 201
+        channel: 1
+    hvacs:
+      - name: "Main HVAC"
+        device: 301
+    buttons:
+      - name: "Keypad Button 1"
+        device: 401
+        channel: 1
 ```
 
-### Available Fields
+### Light Configuration
 | Field     | Type    | Required      | Description                          |
 |-----------|---------|---------------|--------------------------------------|
 | `host`    | string  | ✔ Yes         | IP address of the DINPLUG controller |
@@ -71,85 +95,45 @@ light:
 | `name`    | string  | ✔ Yes         | Entity name in Home Assistant        |
 | `dimmer`  | boolean | ✖ No (true)   | `true` = dimmer, `false` = on/off    |
 
----
+### Cover (Shade) Configuration
+| Field     | Type    | Required      | Description                          |
+|-----------|---------|---------------|--------------------------------------|
+| `shades`  | list    | ✔ Yes         | List of shades                       |
+| `device`  | number  | ✔ Yes         | Module address                       |
+| `channel` | number  | ✔ Yes         | Module channel                       |
+| `name`    | string  | ✔ Yes         | Entity name in Home Assistant        |
 
-## 🛠️ CSV to YAML Converter Tool
+### Climate (HVAC) Configuration
+| Field     | Type    | Required      | Description                          |
+|-----------|---------|---------------|--------------------------------------|
+| `hvacs`   | list    | ✔ Yes         | List of HVAC units                   |
+| `device`  | number  | ✔ Yes         | Module address                       |
+| `name`    | string  | ✔ Yes         | Entity name in Home Assistant        |
 
-For installations with many lights, this repository includes a utility to quickly generate the YAML configuration from a CSV file.
-
-### How to Use
-
-1.  **Run the script:**
-    *   If you have Python installed, run `python csv-to-yaml.py`.
-    *   On Windows, you can use the executable: `csv-to-yaml.exe`.
-
-2.  **Prepare the CSV file:**
-    The CSV file must have the following columns: `Entity`, `Address`, `Button Type`, and `Label`.
-    *   `Entity`: Use `Switch` for on/off lights or `Dimmer` for dimmable lights.
-    *   `Address`: The module and channel in the format `device:channel` (e.g., `104:1`).
-    *   `Button Type`: Use `Dimmer` to set the light as dimmable. Any other value will result in a standard on/off switch.
-    *   `Label`: The desired name for the light.
-
-    **Example `lights.csv`:**
-    ```csv
-    Entity,Label,Address,Button Type
-    Dimmer,"Living Room Ceiling",104:1,Dimmer
-    Switch,"Kitchen Spots",107:4,Rocker Switch
-    Dimmer,"Bedroom Lamp",104:2,Dimmer
-    ```
-
-3.  **Generate the YAML:**
-    *   Open the tool, select your CSV file, enter the controller's IP address, and click "Convert to YAML".
-    *   You can then copy the generated configuration to your clipboard or save it as a `.yaml` file.
-
----
-
-### 💡 How It Works
-
-Home Assistant establishes a TCP connection with the DINPLUG controller and:
-
-**Sends commands:**
-`LOAD <device> <channel> <level>`
-- `level = 0` → OFF
-- `level = 1–100` → dimmer
-- `level = 100` → ON
-
-**Receives telemetry:**
-`R:LOAD <device> <channel> <level>`
-This instantly updates the entity's state in Home Assistant.
-
-**Maintains connection:**
-- Periodically sends `STA` to keep the connection alive.
-- Monitors `R:MODULE STATUS` for availability.
-
-Everything is push-based—no polling.
+### Sensor (Button) Configuration
+| Field     | Type    | Required      | Description                          |
+|-----------|---------|---------------|--------------------------------------|
+| `buttons` | list    | ✔ Yes         | List of keypad buttons to monitor    |
+| `device`  | number  | ✔ Yes         | Keypad address                       |
+| `channel` | number  | ✔ Yes         | Button number                        |
+| `name`    | string  | ✔ Yes         | Entity name in Home Assistant        |
 
 ---
 
 ### ✔️ Supported Features
 
-- [x] ON/OFF control
-- [x] Dimmer control (brightness)
+- [x] Light: ON/OFF and dimmer control
+- [x] Cover: Open, close, stop, and set position
+- [x] Climate: Mode, temperature, and fan control
+- [x] Sensor: Real-time button state (`press`, `release`, `hold`, `double`)
 - [x] Instant status updates via telemetry
 - [x] No polling
-- [x] Multiple modules and channels
-- [x] Online/offline availability per module
-
-### 🚧 Roadmap (Future Releases)
-
-- [ ] Auto-discovery of loads via `REFRESH`
-- [ ] UI-based configuration (Config Flow)
-- [ ] Scene support (`SCN`)
-- [ ] Shade support (`SHADE`)
-- [ ] HVAC support
-- [ ] Automatic `Device` creation per module
 
 ---
 
-### 🐞 Debugging (Optional)
+### 🐞 Debugging
 
-To enable detailed logs for the integration, add this to your `configuration.yaml`:
-
+To enable detailed logs, add this to `configuration.yaml`:
 ```yaml
 logger:
   default: warning
@@ -162,156 +146,140 @@ logger:
 
 # DINPLUG – Integração Home Assistant (YAML)
 
-Integração customizada do Home Assistant para controlar módulos de iluminação **DINPLUG** via Telnet (porta 23).
+Integração customizada do Home Assistant para controlar módulos **DINPLUG** via Telnet (porta 23).
 
-Esta integração permite controlar cargas individuais dos módulos DINPLUG como entidades `light`, incluindo:
-- Luzes On/Off
-- Dimmers (0–100%)
-- Múltiplos módulos e múltiplos canais
-- Atualizações em tempo real por telemetria `R:LOAD`
+Suporta as seguintes plataformas:
+- `light`: Luzes On/Off e dimmers.
+- `cover`: Cortinas e persianas.
+- `climate`: Sistemas de ar condicionado (HVAC).
+- `sensor`: Monitoramento de botões de keypads.
 
 > 📌 Esta é a versão baseada em **YAML** (sem Config Flow). Ideal para instalações profissionais, simples e diretas.
 
 ---
 
+## ⚠️ Breaking Change (Versão 0.2.0)
+
+O formato de configuração YAML foi atualizado para suportar múltiplas plataformas sob um único host. Se você está atualizando de uma versão anterior, **precisa** atualizar seu arquivo `configuration.yaml`.
+
+**Formato antigo:**
+```yaml
+light:
+  - platform: dinplug
+    host: 192.168.51.30
+    # ...
+```
+
+**Novo formato:**
+```yaml
+dinplug:
+  - host: 192.168.51.30
+    lights:
+      # ...
+    shades:
+      # ...
+```
+
+---
+
 ## 📦 Instalação
 
-1. Baixe este repositório.
-2. Copie a pasta:
-
-`custom_components/dinplug`
-
-para dentro do diretório de configuração do Home Assistant:
-
-`/config/custom_components/dinplug`
+1.  Baixe este repositório.
+2.  Copie a pasta `custom_components/dinplug` para o diretório de configuração do seu Home Assistant (`/config`).
+3.  Reinicie o Home Assistant.
 
 A estrutura final deve ficar assim:
-
 ```
 /config
 └── custom_components
     └── dinplug
         ├── __init__.py
-        ├── const.py
+        ├── hub.py
         ├── light.py
+        ├── cover.py
+        ├── climate.py
+        ├── sensor.py
         └── manifest.json
 ```
-
-3. Reinicie o Home Assistant.
 
 ---
 
 ## ⚙️ Configuração via YAML
 
-Adicione ao `configuration.yaml`:
+Adicione a integração `dinplug` ao seu arquivo `configuration.yaml`. Todas as plataformas (light, cover, climate, sensor) são configuradas sob o mesmo host.
 
 ```yaml
-light:
-  - platform: dinplug
-    host: 192.168.51.30
+dinplug:
+  - host: 192.168.51.30
     port: 23
     lights:
       - name: "Sala Teto"
         device: 104
         channel: 1
         dimmer: true
-
-      - name: "Cozinha Spots"
-        device: 107
-        channel: 4
-        dimmer: false
+    shades:
+      - name: "Cortina Sala"
+        device: 201
+        channel: 1
+    hvacs:
+      - name: "AC Principal"
+        device: 301
+    buttons:
+      - name: "Botão Keypad 1"
+        device: 401
+        channel: 1
 ```
 
-### Campos Disponíveis
-| Campo    | Tipo      | Obrigatório | Descrição                           |
-|----------|-----------|-------------|-------------------------------------|
-| `host`   | string    | ✔ Sim       | IP do controlador DINPLUG           |
-| `port`   | número    | ✖ Não (23)  | Porta Telnet                        |
-| `lights` | lista     | ✔ Sim       | Lista de cargas                     |
-| `device` | número    | ✔ Sim       | Endereço do módulo (ex: 104)        |
-| `channel`| número    | ✔ Sim       | Canal do módulo (1–n)               |
-| `name`   | string    | ✔ Sim       | Nome da entidade no HA              |
-| `dimmer` | booleano  | ✖ Não (true)| `true` = dimmer, `false` = on/off   |
+### Configuração de Luzes (Light)
+| Campo     | Tipo     | Obrigatório   | Descrição                           |
+|-----------|----------|---------------|-------------------------------------|
+| `host`    | string   | ✔ Sim         | IP do controlador DINPLUG           |
+| `port`    | número   | ✖ Não (23)    | Porta Telnet                        |
+| `lights`  | lista    | ✔ Sim         | Lista de cargas                     |
+| `device`  | número   | ✔ Sim         | Endereço do módulo (ex: 104)        |
+| `channel` | número   | ✔ Sim         | Canal do módulo (1–n)               |
+| `name`    | string   | ✔ Sim         | Nome da entidade no HA              |
+| `dimmer`  | booleano | ✖ Não (true)  | `true` = dimmer, `false` = on/off   |
 
----
+### Configuração de Cortinas (Cover)
+| Campo     | Tipo     | Obrigatório   | Descrição                           |
+|-----------|----------|---------------|-------------------------------------|
+| `shades`  | lista    | ✔ Sim         | Lista de cortinas                   |
+| `device`  | número   | ✔ Sim         | Endereço do módulo                  |
+| `channel` | número   | ✔ Sim         | Canal do módulo                     |
+| `name`    | string   | ✔ Sim         | Nome da entidade no HA              |
 
-## 🛠️ Ferramenta Conversora CSV para YAML
+### Configuração de Ar Condicionado (Climate)
+| Campo     | Tipo     | Obrigatório   | Descrição                           |
+|-----------|----------|---------------|-------------------------------------|
+| `hvacs`   | lista    | ✔ Sim         | Lista de equipamentos de AC         |
+| `device`  | número   | ✔ Sim         | Endereço do módulo                  |
+| `name`    | string   | ✔ Sim         | Nome da entidade no HA              |
 
-Para instalações com muitas luzes, este repositório inclui um utilitário para gerar rapidamente a configuração YAML a partir de um arquivo CSV.
-
-### Como Usar
-
-1.  **Execute o script:**
-    *   Se você tem Python instalado, execute `python csv-to-yaml.py`.
-    *   No Windows, você pode usar o executável: `csv-to-yaml.exe`.
-
-2.  **Prepare o arquivo CSV:**
-    O arquivo CSV deve ter as seguintes colunas: `Entity`, `Address`, `Button Type`, e `Label`.
-    *   `Entity`: Use `Switch` para luzes on/off ou `Dimmer` para luzes dimerizáveis.
-    *   `Address`: O módulo e o canal no formato `device:channel` (ex: `104:1`).
-    *   `Button Type`: Use `Dimmer` para definir a luz como dimerizável. Qualquer outro valor resultará em uma luz on/off.
-    *   `Label`: O nome desejado para a luz.
-
-    **Exemplo `luzes.csv`:**
-    ```csv
-    Entity,Label,Address,Button Type
-    Dimmer,"Sala Teto",104:1,Dimmer
-    Switch,"Spots Cozinha",107:4,Rocker Switch
-    Dimmer,"Luz Quarto",104:2,Dimmer
-    ```
-
-3.  **Gere o YAML:**
-    *   Abra a ferramenta, selecione seu arquivo CSV, insira o endereço IP do controlador e clique em "Convert to YAML".
-    *   Você pode copiar a configuração gerada ou salvá-la em um arquivo `.yaml`.
-
----
-
-### 💡 Como Funciona
-
-O Home Assistant abre uma conexão TCP com o controlador DINPLUG e:
-
-**Envia comandos:**
-`LOAD <device> <channel> <level>`
-- `level = 0` → OFF
-- `level = 1–100` → dimmer
-- `level = 100` → ON
-
-**Recebe telemetria:**
-`R:LOAD <device> <channel> <level>`
-Atualiza o estado instantaneamente no HA.
-
-**Mantém a conexão:**
-- Envia `STA` periodicamente para manter a conexão ativa.
-- Monitora `R:MODULE STATUS` para disponibilidade.
-
-Tudo é push-based — sem polling.
+### Configuração de Sensores (Button)
+| Campo     | Tipo     | Obrigatório   | Descrição                           |
+|-----------|----------|---------------|-------------------------------------|
+| `buttons` | lista    | ✔ Sim         | Lista de botões de keypad           |
+| `device`  | número   | ✔ Sim         | Endereço do keypad                  |
+| `channel` | número   | ✔ Sim         | Número do botão                     |
+| `name`    | string   | ✔ Sim         | Nome da entidade no HA              |
 
 ---
 
 ### ✔️ Recursos Suportados
 
-- [x] Controle ON/OFF
-- [x] Controle de dimmer (brightness)
-- [x] Atualização instantânea por telemetria
+- [x] Light: Controle ON/OFF e dimmer
+- [x] Cover: Abrir, fechar, parar e definir posição
+- [x] Climate: Controle de modo, temperatura e ventilação
+- [x] Sensor: Estado do botão em tempo real (`press`, `release`, `hold`, `double`)
+- [x] Atualização de status instantânea por telemetria
 - [x] Sem polling
-- [x] Múltiplos módulos e canais
-- [x] Disponibilidade online/offline por módulo
-
-### 🚧 Roadmap (Próximas Versões)
-
-- [ ] Auto-descoberta de loads via `REFRESH`
-- [ ] Configuração via UI (Config Flow)
-- [ ] Suporte a Scenes (`SCN`)
-- [ ] Suporte a Cortinas (`SHADE`)
-- [ ] Suporte a HVAC
-- [ ] Criação automática de `Devices` por módulo
 
 ---
 
-### 🐞 Debug (Opcional)
+### 🐞 Debug
 
-Para ativar logs detalhados da integração, adicione ao `configuration.yaml`:
-
+Para ativar logs detalhados, adicione ao `configuration.yaml`:
 ```yaml
 logger:
   default: warning
