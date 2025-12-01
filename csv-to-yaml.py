@@ -133,7 +133,7 @@ class CSVToYAMLConverter:
                 "name": label,
                 "device": device,
                 "channel": channel,
-                "dimmer": button_type == "dimmer",
+                "dimmer": entity == "dimmer",
             }
 
         if entity in {"shade", "cover", "curtain", "blind", "persiana"}:
